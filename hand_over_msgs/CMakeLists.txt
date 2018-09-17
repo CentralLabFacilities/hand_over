@@ -11,7 +11,10 @@ find_package(catkin REQUIRED COMPONENTS
 )
 
 
-add_action_files(FILES HandOver.action)
+add_action_files(FILES 
+  HandOver.action 
+  MeasureForce.action
+)
 
 generate_messages(   
   DEPENDENCIES

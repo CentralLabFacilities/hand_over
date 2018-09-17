@@ -1,0 +1,7 @@
+# Threshold until Success
+float32 threshold
+---
+bool success
+---
+# Feedback
+float32 current_value
