@@ -14,17 +14,17 @@ from actionlib import SimpleActionClient
 
 from geometry_msgs.msg import WrenchStamped, Point
 from hand_over_msgs.msg import HandOverAction, HandOverGoal, HandOverFeedback, HandOverResult
-from hand_over_msgs.msg import MeasureForceAction, MeasureForceverGoal, MeasureForceFeedback, MeasureForceResult
+from hand_over_msgs.msg import MeasureForceAction, MeasureForceGoal, MeasureForceFeedback, MeasureForceResult
 from play_motion_msgs.msg import PlayMotionAction, PlayMotionGoal
 
 class HandOver(object):
 
     def __init__(self, name, wrenchtopic = "/wrist_ft"):
 
-        self._threshold = rospy.get_param('threshold')
-        self._approach_motion = rospy.get_param('approach_motion')
-        self._retreat_delay = rospy.get_param('retreat_delay')
-        self._retreat_motion = rospy.get_param('retreat_motion')
+        self._threshold = rospy.get_param('~threshold')
+        self._approach_motion = rospy.get_param('~approach_motion')
+        self._retreat_delay = rospy.get_param('~retreat_delay')
+        self._retreat_motion = rospy.get_param('~retreat_motion')
        
         self._result = HandOverResult()
         self._client = {}
@@ -47,7 +47,7 @@ class HandOver(object):
                                                 execute_cb=self.execute_measure, auto_start=False)
 
         self._as_hand.start()
-        self._as_measure
+        self._as_measure.start()
 
     def execute_hand(self, goal):
         feedback = HandOverFeedback()
@@ -57,12 +57,11 @@ class HandOver(object):
         ## Approach
         feedback.phase = HandOverFeedback.PHASE_APPROACH
         self._as_hand.publish_feedback(feedback)
-        rospy.loginfo('Doing PlayMotion: ' + self._approach_motion)
         TiagoPlayMotion(self._approach_motion)
 
         feedback.phase = HandOverFeedback.PHASE_WAITING_FOR_CONTACT
         self._as_hand.publish_feedback(feedback)
-        if self.wait_for_force(self._threshold):
+        if self.wait_for_force_handover(self._threshold):
             self._result.success = True
 
             ## OpenGripper
@@ -84,7 +83,7 @@ class HandOver(object):
         else:
             self._as_hand.set_aborted(self._result)
 
-     def execute_measure(self, goal):
+    def execute_measure(self, goal):
         self._result = MeasureForceResult()
         self._result.success = False
 
@@ -104,7 +103,7 @@ class HandOver(object):
         self.previous_force = current_force
 
     def wait_for_force(self, threshold, timeout=None):
-        feedback = MeasureForceOverFeedback()
+        feedback = MeasureForceFeedback()
 
         # wait for condition
         if timeout is not None:
@@ -175,15 +174,16 @@ class HandOver(object):
         return True
 
 def TiagoPlayMotion(motion, wait_duration = 5):
+    rospy.loginfo('Doing PlayMotion: ' + motion)
     pm = SimpleActionClient('/play_motion', PlayMotionAction)
     pm.wait_for_server()
     pmg = PlayMotionGoal()
-    pm.motion_name = motion
+    pmg.motion_name = motion
     pm.send_goal(pmg)
     if pm.wait_for_result(rospy.Duration(wait_duration)):
         return pm.get_result()
     else:
-        raise False
+        return False 
 
 def OpenGripper():
     TiagoPlayMotion('open_gripper', 0.5)

@@ -1,5 +1,4 @@
 approach_motion: handover
 retreat_delay: 2
-retreat_motion: handover_to_home
-
+retreat_motion: home
 threshold: 2
