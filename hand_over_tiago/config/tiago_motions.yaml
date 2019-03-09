@@ -6,3 +6,10 @@ play_motion:
         points:
         - positions: [1.5694347389897068, -0.7619579944469159, -3.1481384896224824, 2.1751743484330177, -1.5769016600010957, -0.894227432933399, -0.05389981555543383]
           time_from_start: 4.0
+
+      handover_2:
+        joints: [arm_1_joint, arm_2_joint, arm_3_joint, arm_4_joint, arm_5_joint, arm_6_joint, arm_7_joint]
+        meta: {description: handover_2, name: handover_2, usage: demo}
+        points:
+        - positions: [1.5694347389897068, -0.7619579944469159, -3.1481384896224824, 2.1751743484330177, -1.5769016600010957, -0.894227432933399, 1.6]
+          time_from_start: 7.0
