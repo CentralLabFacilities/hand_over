@@ -88,9 +88,9 @@ class HandOver(object):
         # Callback Finished
         if self._result.success:
             rospy.loginfo('Succeeded')
-            self._as_hand.set_succeeded(self._result)
+            self._as_measure.set_succeeded(self._result)
         else:
-            self._as_hand.set_aborted(self._result)
+            self._as_measure.set_aborted(self._result)
 
     def handle_wrench(self, msg):
         current_force = numpy.array([msg.wrench.force.x, msg.wrench.force.y, msg.wrench.force.z])
