@@ -38,10 +38,14 @@ class HandOver(object):
         self._as_hand = actionlib.SimpleActionServer("handover", HandOverAction,
                                                      execute_cb=self.execute_hand, auto_start=False)
 
+        self._as_take = actionlib.SimpleActionServer("handover_take", HandOverAction,
+                                                     execute_cb=self.execute_take, auto_start=False)
+
         self._as_measure = actionlib.SimpleActionServer("measure", MeasureForceAction,
                                                         execute_cb=self.execute_measure, auto_start=False)
 
         self._as_hand.start()
+        self._as_take.start()
         self._as_measure.start()
 
     def execute_hand(self, goal):
@@ -56,7 +60,7 @@ class HandOver(object):
 
         feedback.phase = HandOverFeedback.PHASE_WAITING_FOR_CONTACT
         self._as_hand.publish_feedback(feedback)
-        if self.wait_for_force_handover(self._threshold):
+        if self.wait_for_force_handover(self._as_hand, self._threshold):
             self._result.success = True
 
             # Open gripper
@@ -77,6 +81,45 @@ class HandOver(object):
             self._as_hand.set_succeeded(self._result)
         else:
             self._as_hand.set_aborted(self._result)
+
+    def execute_take(self, goal):
+        feedback = HandOverFeedback()
+        self._result = HandOverResult()
+        self._result.success = False
+
+        # Approach
+        feedback.phase = HandOverFeedback.PHASE_APPROACH
+        self._as_take.publish_feedback(feedback)
+        tiago_play_motion(self._approach_motion)
+
+        # Open gripper
+        feedback.phase = HandOverFeedback.PHASE_EXECUTING
+        self._as_take.publish_feedback(feedback)
+        open_gripper()
+
+        feedback.phase = HandOverFeedback.PHASE_WAITING_FOR_CONTACT
+        self._as_take.publish_feedback(feedback)
+        if self.wait_for_force_handover(self._as_take, self._threshold):
+            self._result.success = True
+
+            # Close gripper
+            feedback.phase = HandOverFeedback.PHASE_EXECUTING
+            self._as_take.publish_feedback(feedback)
+            close_gripper()
+
+            rospy.sleep(self._retreat_delay)
+
+            # Retreat
+            feedback.phase = HandOverFeedback.PHASE_RETREAT
+            self._as_take.publish_feedback(feedback)
+            tiago_play_motion(self._retreat_motion)
+
+        # Callback Finished
+        if self._result.success:
+            rospy.loginfo('Succeeded')
+            self._as_take.set_succeeded(self._result)
+        else:
+            self._as_take.set_aborted(self._result)
 
     def execute_measure(self, goal):
         self._result = MeasureForceResult()
@@ -132,7 +175,7 @@ class HandOver(object):
         rospy.loginfo("wait_for_force ended with: current_val: %f threshold: %f", current_val, threshold)
         return True
 
-    def wait_for_force_handover(self, threshold, timeout=None):
+    def wait_for_force_handover(self, action_server, threshold, timeout=None):
         feedback = HandOverFeedback()
 
         # wait for condition
@@ -147,15 +190,15 @@ class HandOver(object):
         while current_val < threshold:
             feedback.phase = HandOverFeedback.PHASE_WAITING_FOR_CONTACT
             # feedback.current_value = current_val
-            self._as_hand.publish_feedback(feedback)
+            action_server.publish_feedback(feedback)
 
             current_val = ((N-1)*current_val+numpy.linalg.norm(self.previous_force-self.force_bias))/N
             rospy.logdebug('current_val: %f', current_val)
             # check that preempt has not been requested by the client
-            if self._as_hand.is_preempt_requested():
+            if action_server.is_preempt_requested():
                 rospy.loginfo('Preempted')
                 self._result.success = False
-                self._as_hand.set_preempted(self._result)
+                action_server.set_preempted(self._result)
                 return False
 
             if timeout is not None:
@@ -186,8 +229,13 @@ def open_gripper():
     tiago_play_motion('open_gripper', 0.5)
 
 
+def close_gripper():
+    tiago_play_motion('close_gripper', 1.0)
+
+
 if __name__ == '__main__':
 
     rospy.init_node('hand_over')
     HandOver("handover")
+    rospy.loginfo("Everything started, spinning ...")
     rospy.spin()
