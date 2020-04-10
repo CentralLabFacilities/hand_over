@@ -1,10 +1,11 @@
 <?xml version="1.0"?>
 <launch>
+	<arg name="config_file" default="config" doc="Name of the config file"/>
 
 	<rosparam command="load" file="$(find hand_over_tiago)/config/tiago_motions.yaml" />
 
 	<node name="hand_over" pkg="hand_over_tiago" type="hand_over_node.py" output="screen">
-    	<rosparam command="load" file="$(find hand_over_tiago)/config/config.yaml" />
+		<rosparam command="load" file="$(find hand_over_tiago)/config/$(arg config_file).yaml" />
 	</node>
 
 </launch>
