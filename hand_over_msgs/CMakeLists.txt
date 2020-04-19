@@ -7,12 +7,14 @@ project(hand_over_msgs)
 find_package(catkin REQUIRED COMPONENTS
   actionlib_msgs
   std_msgs
+  moveit_msgs
   message_generation
 )
 
 
 add_action_files(FILES 
   HandOver.action 
+  TakeOver.action
   MeasureForce.action
 )
 
@@ -20,6 +22,7 @@ generate_messages(
   DEPENDENCIES
   std_msgs
   actionlib_msgs
+  moveit_msgs
 ) 
 
 
@@ -35,7 +38,7 @@ generate_messages(
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES hand_over
-  CATKIN_DEPENDS actionlib_msgs std_msgs 
+  CATKIN_DEPENDS actionlib_msgs std_msgs moveit_msgs
 #  DEPENDS system_lib
 )
 
