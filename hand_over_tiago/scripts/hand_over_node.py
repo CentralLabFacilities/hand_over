@@ -61,7 +61,7 @@ class HandOver(object):
         # Approach
         feedback.phase = HandOverFeedback.PHASE_APPROACH
         self._as_hand.publish_feedback(feedback)
-        tiago_play_motion(self._approach_motion)
+        tiago_play_motion(self._approach_motion) # TODO check return value
 
         feedback.phase = HandOverFeedback.PHASE_WAITING_FOR_CONTACT
         self._as_hand.publish_feedback(feedback)
@@ -80,7 +80,9 @@ class HandOver(object):
             # Retreat
             feedback.phase = HandOverFeedback.PHASE_RETREAT
             self._as_hand.publish_feedback(feedback)
-            tiago_play_motion(self._retreat_motion)
+            retreat_result = tiago_play_motion(self._retreat_motion, wait_duration=15.0)
+            if retreat_result == False or retreat_result.error_code != retreat_result.SUCCEEDED:
+                self._result.success = False
             
         # Callback Finished
         if self._result.success:
@@ -97,7 +99,8 @@ class HandOver(object):
         # Approach
         feedback.phase = HandOverFeedback.PHASE_APPROACH
         self._as_take.publish_feedback(feedback)
-        tiago_play_motion(self._approach_motion)
+        approach_result = tiago_play_motion(self._approach_motion) # TODO check return value
+        # if approach_result == False or approach_result.error_code != approach_result.SUCCEEDED:
 
         # Open gripper
         feedback.phase = HandOverFeedback.PHASE_EXECUTING
@@ -131,7 +134,9 @@ class HandOver(object):
             # Retreat
             feedback.phase = HandOverFeedback.PHASE_RETREAT
             self._as_take.publish_feedback(feedback)
-            tiago_play_motion(self._retreat_motion)
+            retreat_result = tiago_play_motion(self._retreat_motion, wait_duration=15.0)
+            if retreat_result == False or retreat_result.error_code != retreat_result.SUCCEEDED:
+                self._result.success = False
 
         # Callback Finished
         if self._result.success:
@@ -239,17 +244,20 @@ def tiago_play_motion(motion, wait_duration=5.0):
     pmg.motion_name = motion
     pm.send_goal(pmg)
     if pm.wait_for_result(rospy.Duration.from_sec(wait_duration)):
-        return pm.get_result()
+        pm_result = pm.get_result()
+        rospy.loginfo(pm_result)
+        return pm_result
     else:
+        rospy.logwarn("play motion timed out")
         return False 
 
 
 def open_gripper():
-    tiago_play_motion('open_gripper', 0.5)
+    return tiago_play_motion('open_gripper', 1.0)
 
 
 def close_gripper():
-    tiago_play_motion('close_gripper', 1.0)
+    return tiago_play_motion('close_gripper', 1.0)
 
 
 if __name__ == '__main__':
