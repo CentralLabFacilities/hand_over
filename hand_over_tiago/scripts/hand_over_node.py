@@ -236,7 +236,7 @@ class HandOver(object):
         return True
 
 
-def tiago_play_motion(motion, wait_duration=5.0):
+def tiago_play_motion(motion, wait_duration=60.0):
     rospy.loginfo('Doing PlayMotion: ' + motion)
     pm = SimpleActionClient('/play_motion', PlayMotionAction)
     pm.wait_for_server()
