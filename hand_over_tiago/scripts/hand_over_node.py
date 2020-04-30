@@ -7,7 +7,9 @@ import actionlib
 from actionlib import SimpleActionClient
 
 from geometry_msgs.msg import WrenchStamped, Point
-from hand_over_msgs.msg import HandOverAction, HandOverGoal, HandOverFeedback, HandOverResult
+from moveit_msgs.msg import PlanningScene
+from moveit_msgs.srv import ApplyPlanningScene, ApplyPlanningSceneRequest
+from hand_over_msgs.msg import HandOverAction, HandOverGoal, HandOverFeedback, HandOverResult, TakeOverAction
 from hand_over_msgs.msg import MeasureForceAction, MeasureForceGoal, MeasureForceFeedback, MeasureForceResult
 from play_motion_msgs.msg import PlayMotionAction, PlayMotionGoal
 
@@ -35,10 +37,13 @@ class HandOver(object):
 
         self.sub_ft = rospy.Subscriber(wrenchtopic, WrenchStamped, self.handle_wrench)
 
+        self._apply_planning_scene_diff = rospy.ServiceProxy('/apply_planning_scene', ApplyPlanningScene)
+        self._apply_planning_scene_diff.wait_for_service()
+
         self._as_hand = actionlib.SimpleActionServer("handover", HandOverAction,
                                                      execute_cb=self.execute_hand, auto_start=False)
 
-        self._as_take = actionlib.SimpleActionServer("handover_take", HandOverAction,
+        self._as_take = actionlib.SimpleActionServer("handover_take", TakeOverAction,
                                                      execute_cb=self.execute_take, auto_start=False)
 
         self._as_measure = actionlib.SimpleActionServer("measure", MeasureForceAction,
@@ -67,6 +72,8 @@ class HandOver(object):
             feedback.phase = HandOverFeedback.PHASE_EXECUTING
             self._as_hand.publish_feedback(feedback)
             open_gripper()
+
+            # TODO un-attach object in gripper, if present
 
             rospy.sleep(self._retreat_delay)
 
@@ -106,6 +113,18 @@ class HandOver(object):
             feedback.phase = HandOverFeedback.PHASE_EXECUTING
             self._as_take.publish_feedback(feedback)
             close_gripper()
+
+            if len(goal.object.object.primitives) != 0 or len(goal.object.object.meshes) != 0 or len(goal.object.object.planes) != 0:
+                rospy.loginfo("AttachedCollisionObject given, attaching now")
+                scene = PlanningScene()
+                scene.is_diff = True
+                scene.robot_state.is_diff = True
+                scene.robot_state.attached_collision_objects = [goal.object]
+                planning_scene_diff_req = ApplyPlanningSceneRequest()
+                planning_scene_diff_req.scene = scene
+                rospy.loginfo(self._apply_planning_scene_diff.call(planning_scene_diff_req))
+            else:
+                rospy.loginfo("No AttachedCollisionObject given, so not attaching")
 
             rospy.sleep(self._retreat_delay)
 
