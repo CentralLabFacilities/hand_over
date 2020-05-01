@@ -7,7 +7,9 @@ import actionlib
 from actionlib import SimpleActionClient
 
 from geometry_msgs.msg import WrenchStamped, Point
-from hand_over_msgs.msg import HandOverAction, HandOverGoal, HandOverFeedback, HandOverResult
+from moveit_msgs.msg import PlanningScene
+from moveit_msgs.srv import ApplyPlanningScene, ApplyPlanningSceneRequest
+from hand_over_msgs.msg import HandOverAction, HandOverGoal, HandOverFeedback, HandOverResult, TakeOverAction
 from hand_over_msgs.msg import MeasureForceAction, MeasureForceGoal, MeasureForceFeedback, MeasureForceResult
 from play_motion_msgs.msg import PlayMotionAction, PlayMotionGoal
 
@@ -35,10 +37,13 @@ class HandOver(object):
 
         self.sub_ft = rospy.Subscriber(wrenchtopic, WrenchStamped, self.handle_wrench)
 
+        self._apply_planning_scene_diff = rospy.ServiceProxy('/apply_planning_scene', ApplyPlanningScene)
+        self._apply_planning_scene_diff.wait_for_service()
+
         self._as_hand = actionlib.SimpleActionServer("handover", HandOverAction,
                                                      execute_cb=self.execute_hand, auto_start=False)
 
-        self._as_take = actionlib.SimpleActionServer("handover_take", HandOverAction,
+        self._as_take = actionlib.SimpleActionServer("handover_take", TakeOverAction,
                                                      execute_cb=self.execute_take, auto_start=False)
 
         self._as_measure = actionlib.SimpleActionServer("measure", MeasureForceAction,
@@ -56,7 +61,7 @@ class HandOver(object):
         # Approach
         feedback.phase = HandOverFeedback.PHASE_APPROACH
         self._as_hand.publish_feedback(feedback)
-        tiago_play_motion(self._approach_motion)
+        tiago_play_motion(self._approach_motion) # TODO check return value
 
         feedback.phase = HandOverFeedback.PHASE_WAITING_FOR_CONTACT
         self._as_hand.publish_feedback(feedback)
@@ -68,12 +73,16 @@ class HandOver(object):
             self._as_hand.publish_feedback(feedback)
             open_gripper()
 
+            # TODO un-attach object in gripper, if present
+
             rospy.sleep(self._retreat_delay)
 
             # Retreat
             feedback.phase = HandOverFeedback.PHASE_RETREAT
             self._as_hand.publish_feedback(feedback)
-            tiago_play_motion(self._retreat_motion)
+            retreat_result = tiago_play_motion(self._retreat_motion, wait_duration=15.0)
+            if retreat_result == False or retreat_result.error_code != retreat_result.SUCCEEDED:
+                self._result.success = False
             
         # Callback Finished
         if self._result.success:
@@ -90,7 +99,8 @@ class HandOver(object):
         # Approach
         feedback.phase = HandOverFeedback.PHASE_APPROACH
         self._as_take.publish_feedback(feedback)
-        tiago_play_motion(self._approach_motion)
+        approach_result = tiago_play_motion(self._approach_motion) # TODO check return value
+        # if approach_result == False or approach_result.error_code != approach_result.SUCCEEDED:
 
         # Open gripper
         feedback.phase = HandOverFeedback.PHASE_EXECUTING
@@ -107,12 +117,26 @@ class HandOver(object):
             self._as_take.publish_feedback(feedback)
             close_gripper()
 
+            if len(goal.object.object.primitives) != 0 or len(goal.object.object.meshes) != 0 or len(goal.object.object.planes) != 0:
+                rospy.loginfo("AttachedCollisionObject given, attaching now")
+                scene = PlanningScene()
+                scene.is_diff = True
+                scene.robot_state.is_diff = True
+                scene.robot_state.attached_collision_objects = [goal.object]
+                planning_scene_diff_req = ApplyPlanningSceneRequest()
+                planning_scene_diff_req.scene = scene
+                rospy.loginfo(self._apply_planning_scene_diff.call(planning_scene_diff_req))
+            else:
+                rospy.loginfo("No AttachedCollisionObject given, so not attaching")
+
             rospy.sleep(self._retreat_delay)
 
             # Retreat
             feedback.phase = HandOverFeedback.PHASE_RETREAT
             self._as_take.publish_feedback(feedback)
-            tiago_play_motion(self._retreat_motion)
+            retreat_result = tiago_play_motion(self._retreat_motion, wait_duration=15.0)
+            if retreat_result == False or retreat_result.error_code != retreat_result.SUCCEEDED:
+                self._result.success = False
 
         # Callback Finished
         if self._result.success:
@@ -212,7 +236,7 @@ class HandOver(object):
         return True
 
 
-def tiago_play_motion(motion, wait_duration=5.0):
+def tiago_play_motion(motion, wait_duration=60.0):
     rospy.loginfo('Doing PlayMotion: ' + motion)
     pm = SimpleActionClient('/play_motion', PlayMotionAction)
     pm.wait_for_server()
@@ -220,17 +244,20 @@ def tiago_play_motion(motion, wait_duration=5.0):
     pmg.motion_name = motion
     pm.send_goal(pmg)
     if pm.wait_for_result(rospy.Duration.from_sec(wait_duration)):
-        return pm.get_result()
+        pm_result = pm.get_result()
+        rospy.loginfo(pm_result)
+        return pm_result
     else:
+        rospy.logwarn("play motion timed out")
         return False 
 
 
 def open_gripper():
-    tiago_play_motion('open_gripper', 0.5)
+    return tiago_play_motion('open_gripper', 1.0)
 
 
 def close_gripper():
-    tiago_play_motion('close_gripper', 1.0)
+    return tiago_play_motion('close_gripper', 1.0)
 
 
 if __name__ == '__main__':
